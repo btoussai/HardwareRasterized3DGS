@@ -1,0 +1,8 @@
+*.ply
+build/*
+Debug/*
+Release/*
+libs/*
+libs_install/*
+shaderCache/*
+.idea/*
