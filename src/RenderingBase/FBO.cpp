@@ -36,7 +36,7 @@ void FBO::createAttachment(GLenum attachment, GLenum internalFormat, GLenum form
     }
 
     Texture2D::TextureData data = Texture2D::TextureData("", width, height, internalFormat, format, type, nullptr, [](void*){});
-    auto& tex = attachments[attachment] = std::make_unique<Texture2D>(data);
+    auto& tex = attachments[attachment] = std::make_unique<Texture2D>(data, true, true, true, 1);
     glNamedFramebufferTexture(ID, attachment, tex->getID(), 0);
 
 }
@@ -91,4 +91,9 @@ void FBO::blit(GLuint dstID, GLbitfield mask) {
             0, 0, width, height,
             0, 0, width, height,
             mask, GL_NEAREST);
+}
+
+void FBO::makeEmpty() {
+    glNamedFramebufferParameteri(ID, GL_FRAMEBUFFER_DEFAULT_WIDTH, (int)width);
+    glNamedFramebufferParameteri(ID, GL_FRAMEBUFFER_DEFAULT_HEIGHT, (int)height);
 }

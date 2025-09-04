@@ -16,6 +16,7 @@ public:
     ~FBO();
     void init(int width, int height);
     void reset();
+    void makeEmpty();
     void createAttachment(GLenum attachment, GLenum internalFormat, GLenum format, GLenum type);
     bool checkComplete();
     void drawBuffersAllAttachments();

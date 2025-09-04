@@ -10,6 +10,7 @@ ___out vec2 local_coord;
 
 void main(void){
 
+//    InstanceID = gl_InstanceID;
     InstanceID = gl_VertexID / 6;
 
     // Corners:

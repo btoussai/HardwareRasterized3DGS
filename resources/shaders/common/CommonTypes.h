@@ -36,6 +36,10 @@ struct Uniforms{
     float* restrict sh_coeffs_green;
     float* restrict sh_coeffs_blue;
 
+    float* restrict dLoss_dsh_coeffs_red;
+    float* restrict dLoss_dsh_coeffs_green;
+    float* restrict dLoss_dsh_coeffs_blue;
+
     int* restrict visible_gaussians_counter;
     float* restrict gaussians_depth;
     int* restrict gaussians_indices;
@@ -48,6 +52,11 @@ struct Uniforms{
     vec2* restrict eigen_vecs; // principal direction of the 2D ellipsoid corresponding to the largest eigen value
     vec4* restrict predicted_colors;
 
+    f16vec4* restrict dLoss_dconic_opacity;
+    f16vec4* restrict dLoss_dpredicted_colors;
+
+    uint64_t ground_truth_image; // handle of the ground truth picture
+    uint64_t accumulated_image_fwd;  // handle of the image used for alpha blending in the forward pass
 };
 
 #endif //COMMONTYPES_H

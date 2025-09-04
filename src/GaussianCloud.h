@@ -50,16 +50,20 @@ public:
 private:
     Shader pointShader = GLShaderLoader::load("point.vs", "point.fs");
     Shader quadShader = GLShaderLoader::load("quad.vs", "quad.fs");
+    Shader quad_interlock_Shader = GLShaderLoader::load("quad_interlock.vs", "quad_interlock.fs");
     Shader testVisibilityShader = GLShaderLoader::load("testVisibility.cp");
     Shader computeBoundingBoxesShader = GLShaderLoader::load("computeBoundingBoxes.cp");
     Shader predictColorsShader = GLShaderLoader::load("predict_colors.cp");
     Shader predictColorsForAllShader = GLShaderLoader::load("predict_colors_for_all.cp");
 
+    // Backward pass
+    Shader quad_interlock_bwd_Shader = GLShaderLoader::load("quad_interlock_bwd.vs", "quad_interlock_bwd.fs");
+
     void prepareRender(Camera& camera);
 
     GLBuffer uniforms;
-    VAO quad;
     FBO fbo;
+    FBO emptyfbo;
 
     Sort sort;
 
@@ -71,7 +75,7 @@ private:
     float min_opacity = 0.02f;
     bool front_to_back = true;
     int selected_gaussian = -1;
-    int fboFormat = 0;
+    bool softwareBlending = false;
 
     enum OPERATIONS{
         PREDICT_COLORS_ALL,

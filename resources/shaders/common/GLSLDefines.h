@@ -171,6 +171,7 @@ static const uint gl_LocalInvocationIndex = 0;
 static const uvec3 gl_GlobalInvocationID = uvec3(0);
 static const uvec3 gl_NumWorkGroups = uvec3(0);
 static const bool gl_FrontFacing = true;
+static const bool gl_HelperInvocation = false;
 
 static vec4 gl_Position = vec4(0);
 static vec2 gl_PointCoord = vec2(0);
@@ -547,6 +548,11 @@ float dFdxFine(float);
 float dFdyFine(float);
 vec2 dFdxFine(vec2);
 vec2 dFdyFine(vec2);
+
+void beginInvocationInterlockARB();
+void endInvocationInterlockARB();
+void beginInvocationInterlockNV();
+void endInvocationInterlockNV();
 
 #endif
 

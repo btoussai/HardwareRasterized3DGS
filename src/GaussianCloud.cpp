@@ -13,7 +13,32 @@
 
 using namespace glm;
 
+const GLenum FBO_FORMAT = GL_RGBA16F;
+
 void GaussianCloud::prepareRender(Camera &camera) {
+
+    const int width = camera.getFramebufferSize().x;
+    const int height = camera.getFramebufferSize().y;
+
+    const GLenum formats[] = {GL_RGBA8, GL_RGBA16F, GL_RGBA32F};
+
+    if(
+            width != fbo.getWidth() ||
+            height != fbo.getHeight()) {
+        fbo.init(width, height);
+        fbo.createAttachment(GL_COLOR_ATTACHMENT0, FBO_FORMAT, GL_RGBA, GL_FLOAT);
+        fbo.drawBuffersAllAttachments();
+        if(!fbo.checkComplete()){
+            exit(0);
+        }
+
+        emptyfbo.init(width, height);
+        emptyfbo.makeEmpty();
+        if(!emptyfbo.checkComplete()){
+            exit(0);
+        }
+
+    }
 
     const int zero = 0;
     visible_gaussians_counter.storeData(&zero, 1, sizeof(int), 0, false, false, true);
@@ -30,9 +55,6 @@ void GaussianCloud::prepareRender(Camera &camera) {
     uniforms_cpu.near_plane = camera.getNearPlane();
     uniforms_cpu.far_plane = camera.getFarPlane();
     uniforms_cpu.scale_modifier = scale_modifier;
-
-    const float width = (float)camera.getFramebufferSize().x;
-    const float height = (float)camera.getFramebufferSize().y;
 
     uniforms_cpu.selected_gaussian = selected_gaussian;
     uniforms_cpu.min_opacity = min_opacity;
@@ -67,23 +89,12 @@ void GaussianCloud::prepareRender(Camera &camera) {
     uniforms_cpu.eigen_vecs = reinterpret_cast<vec2 *>(eigen_vecs.getGLptr());
     uniforms_cpu.predicted_colors = reinterpret_cast<vec4 *>(predicted_colors.getGLptr());
 
+    uniforms_cpu.ground_truth_image = 0;
+    uniforms_cpu.accumulated_image_fwd = fbo.getAttachment(GL_COLOR_ATTACHMENT0)->getImageHandle();
 
     uniforms.storeData(&uniforms_cpu, 1, sizeof(Uniforms));
     glBindBufferBase(GL_UNIFORM_BUFFER, 0, uniforms.getID());
 
-    const GLenum formats[] = {GL_RGBA8, GL_RGBA16F, GL_RGBA32F};
-
-    if(
-        (int)width != fbo.getWidth() ||
-        (int)height != fbo.getHeight() ||
-        formats[fboFormat] != fbo.getAttachment(GL_COLOR_ATTACHMENT0)->getTextureData().internalFormat
-        ) {
-        fbo.init((int)width, (int)height);
-        fbo.createAttachment(GL_COLOR_ATTACHMENT0, formats[fboFormat], GL_RGBA, GL_FLOAT);
-        if(!fbo.checkComplete()){
-            exit(0);
-        }
-    }
 }
 
 void GaussianCloud::render(Camera &camera) {
@@ -91,13 +102,21 @@ void GaussianCloud::render(Camera &camera) {
     prepareRender(camera);
 
     if(renderAsQuads){
-        fbo.bind();
-        glViewport(0, 0, fbo.getWidth(), fbo.getHeight());
-        // need to clear with alpha = 1 for front to back blending
-        glClearColor(0.0f,0.0f,0.0f,1.0f);
-        glClear(GL_COLOR_BUFFER_BIT);
+        if(softwareBlending){
+            emptyfbo.bind();
+            glViewport(0, 0, fbo.getWidth(), fbo.getHeight());
+            const GLuint ID = fbo.getAttachment(GL_COLOR_ATTACHMENT0)->getID();
+            vec4 value = vec4(0.0f, 0.0f, 0.0f, 1.0f);
+            glClearTexImage(ID, 0, GL_RGBA, GL_FLOAT, &value);
+        }else{
+            fbo.bind();
+            glViewport(0, 0, fbo.getWidth(), fbo.getHeight());
+            // need to clear with alpha = 1 for front to back blending
+            glClearColor(0.0f,0.0f,0.0f,1.0f);
+            glClear(GL_COLOR_BUFFER_BIT);
 
-        glDisable(GL_CULL_FACE);
+        }
+
         glEnable(GL_BLEND);
         if(front_to_back){
             glBlendEquation(GL_FUNC_ADD);
@@ -105,6 +124,8 @@ void GaussianCloud::render(Camera &camera) {
         }else{
             glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
         }
+        glDisable(GL_CULL_FACE);
+
 
         {
             auto& q = timers[OPERATIONS::TEST_VISIBILITY].push_back();
@@ -166,27 +187,40 @@ void GaussianCloud::render(Camera &camera) {
         {
             auto& q = timers[OPERATIONS::DRAW_AS_QUADS].push_back();
             q.begin();
-            // Use instanced rendering the draw a 2D quad for every visible gaussian
-            quadShader.start();
-            quad.bind();
-            quad.bindAttributes({0});
-            glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, num_visible_gaussians);
+            // draw a 2D quad for every visible gaussian
+            auto& s = softwareBlending ? quad_interlock_Shader : quadShader;
+            s.start();
+
+            if(softwareBlending){
+                const GLuint ID = fbo.getAttachment(GL_COLOR_ATTACHMENT0)->getID();
+                glBindImageTexture(0, ID, 0, false, 0, GL_READ_WRITE, FBO_FORMAT);
+            }
+
+            VAO vao; // empty vertex array
+            vao.bind();
             glMemoryBarrier(GL_ALL_BARRIER_BITS);
-            quad.unbindAttributes({0});
-            quad.unbind();
-            quadShader.stop();
+            glDrawArrays(GL_TRIANGLES, 0, num_visible_gaussians * 6);
+            glMemoryBarrier(GL_ALL_BARRIER_BITS);
+            vao.unbind();
+
+            s.stop();
             q.end();
         }
 
         glEnable(GL_CULL_FACE);
         glDisable(GL_BLEND);
-        fbo.unbind();
 
         {
             auto& q = timers[OPERATIONS::BLIT_FBO].push_back();
             q.begin();
             fbo.blit(0, GL_COLOR_BUFFER_BIT);
             q.end();
+        }
+
+        if(softwareBlending){
+            emptyfbo.unbind();
+        }else{
+            fbo.unbind();
         }
     }
 
@@ -229,16 +263,29 @@ void GaussianCloud::initShaders() {
     testVisibilityShader.init_uniforms({});
     computeBoundingBoxesShader.init_uniforms({});
     quadShader.init_uniforms({});
+    quad_interlock_Shader.init_uniforms({});
     predictColorsShader.init_uniforms({});
     predictColorsForAllShader.init_uniforms({});
 
-    quad.bind();
-    std::vector<float> positions = { -1.0f, 1.0f, -1.0f, -1.0f, 1.0f, 1.0f, 1.0f, -1.0f };
-    quad.createContiguousFloatAttribute(0, positions, 2);
-    quad.unbind();
-
     counter.storeData(nullptr, 1, sizeof(int), GL_MAP_READ_BIT | GL_CLIENT_STORAGE_BIT, false, true, true);
 }
+
+// Helper to display a little (?) mark which shows a tooltip when hovered.
+// In your own code you may want to display an actual icon if you are using a merged icon fonts (see misc/fonts/README.txt)
+static void HelpMarker(const char* desc)
+{
+    ImGui::SameLine();
+    ImGui::TextDisabled("(?)");
+    if (ImGui::IsItemHovered())
+    {
+        ImGui::BeginTooltip();
+        ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
+        ImGui::TextUnformatted(desc);
+        ImGui::PopTextWrapPos();
+        ImGui::EndTooltip();
+    }
+}
+
 
 void GaussianCloud::GUI(Camera& camera) {
 
@@ -249,15 +296,11 @@ void GaussianCloud::GUI(Camera& camera) {
     ImGui::Checkbox("Render as quads", &renderAsQuads);
     ImGui::Checkbox("Antialiasing", &antialiasing);
     ImGui::Checkbox("Front to back blending", &front_to_back);
+    ImGui::Checkbox("Software alpha-blending", &softwareBlending);
+    HelpMarker("Perform alpha-blending manually with ARB_fragment_shader_interlock "
+               "to define a critical section in the fragment shader.");
     ImGui::SliderFloat("scale_modifier", &scale_modifier, 0.001f, 1.0f, "%.3f", ImGuiSliderFlags_Logarithmic);
     ImGui::SliderFloat("min_opacity", &min_opacity, 0.01f, 1.0f, "%.3f", ImGuiSliderFlags_Logarithmic);
-
-    if(renderAsQuads){
-        ImGui::Text("FBO internal format:");
-        ImGui::RadioButton("RGBA8", &fboFormat, 0);
-        ImGui::RadioButton("RGBA16F", &fboFormat, 1);
-        ImGui::RadioButton("RGBA32F", &fboFormat, 2);
-    }
 
     ImGui::SliderInt("Selected gaussian", &selected_gaussian, -1, num_gaussians-1);
 

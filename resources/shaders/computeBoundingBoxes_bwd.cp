@@ -19,12 +19,12 @@ void main(void){
 
     const int GaussianID = uniforms.sorted_gaussian_indices[n];
 
+    const vec4 dLoss_dconic_opacity = vec4(uniforms.dLoss_dconic_opacity[n]);
+
     const float opacity = uniforms.opacities[GaussianID];
     const vec3 mean_world_space = vec3(uniforms.positions[GaussianID]);
     const vec3 scale = vec3(uniforms.scales[GaussianID]);
     const vec4 quaternion = uniforms.rotations[GaussianID];
-
-    const float scale_modifier = uniforms.scale_modifier;
 
     const float width = uniforms.width;
     const float height = uniforms.height;
@@ -33,7 +33,7 @@ void main(void){
 
     // transform to view space
     const vec3 mean = vec3(uniforms.viewMat * vec4(mean_world_space, 1.0f));
-    const mat3 cov3D = computeCov3D(scale, scale_modifier, quaternion, mat3(uniforms.viewMat));
+    const mat3 cov3D = computeCov3D(scale, 1.0f, quaternion, mat3(uniforms.viewMat));
 
     const vec4 p_hom = uniforms.projMat * vec4(mean, 1.0f);
     const vec2 ndc = vec2(p_hom) / p_hom.w;
@@ -53,15 +53,8 @@ void main(void){
     const float det_inv = 1.0f / det;
     const vec3 conic = vec3( cov.z * det_inv, -cov.y * det_inv, cov.x * det_inv );
 
-    vec2 eigen_vec = vec2(1.0f, 0.0f);
-    const vec2 bbox_pixels = computeOBB(conic, opacity, uniforms.min_opacity, eigen_vec);
+    const vec3 dLoss_dconic = vec3(dLoss_dconic_opacity);
+    const float dLoss_ddet_inv = dot(dLoss_dconic, vec3(cov.z, -cov.y, cov.x));
 
-    const vec2 proj_pixels = vec2(ndc * 0.5f + 0.5f) * vec2(width, height);
-    const vec4 bounding_box = vec4(proj_pixels, bbox_pixels);
-    const vec4 conic_opacity = vec4( conic.x, conic.y, conic.z, opacity);
-
-    uniforms.bounding_boxes[n] = bounding_box;
-    uniforms.conic_opacity[n] = conic_opacity;
-    uniforms.eigen_vecs[n] = eigen_vec;
 
 }
