@@ -250,9 +250,7 @@ void Window::mainloop(int argc, char **argv) {
         glfwGetFramebufferSize(w, &width, &height);
 
         glViewport(0, 0, width, height); // reset the viewport
-//        glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
-        // need to clear with alpha = 1 for front to back blending
-        glClearColor(0.0f,0.0f,0.0f,1.0f);
+        glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 //        windowHovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow);
 

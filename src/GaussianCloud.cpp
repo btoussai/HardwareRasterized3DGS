@@ -71,6 +71,19 @@ void GaussianCloud::prepareRender(Camera &camera) {
     uniforms.storeData(&uniforms_cpu, 1, sizeof(Uniforms));
     glBindBufferBase(GL_UNIFORM_BUFFER, 0, uniforms.getID());
 
+    const GLenum formats[] = {GL_RGBA8, GL_RGBA16F, GL_RGBA32F};
+
+    if(
+        (int)width != fbo.getWidth() ||
+        (int)height != fbo.getHeight() ||
+        formats[fboFormat] != fbo.getAttachment(GL_COLOR_ATTACHMENT0)->getTextureData().internalFormat
+        ) {
+        fbo.init((int)width, (int)height);
+        fbo.createAttachment(GL_COLOR_ATTACHMENT0, formats[fboFormat], GL_RGBA, GL_FLOAT);
+        if(!fbo.checkComplete()){
+            exit(0);
+        }
+    }
 }
 
 void GaussianCloud::render(Camera &camera) {
@@ -78,9 +91,13 @@ void GaussianCloud::render(Camera &camera) {
     prepareRender(camera);
 
     if(renderAsQuads){
-        glDisable(GL_DEPTH_TEST);
+        fbo.bind();
+        glViewport(0, 0, fbo.getWidth(), fbo.getHeight());
+        // need to clear with alpha = 1 for front to back blending
+        glClearColor(0.0f,0.0f,0.0f,1.0f);
+        glClear(GL_COLOR_BUFFER_BIT);
+
         glDisable(GL_CULL_FACE);
-        glDepthMask(GL_FALSE);
         glEnable(GL_BLEND);
         if(front_to_back){
             glBlendEquation(GL_FUNC_ADD);
@@ -163,8 +180,14 @@ void GaussianCloud::render(Camera &camera) {
 
         glEnable(GL_CULL_FACE);
         glDisable(GL_BLEND);
-        glEnable(GL_DEPTH_TEST);
-        glDepthMask(GL_TRUE);
+        fbo.unbind();
+
+        {
+            auto& q = timers[OPERATIONS::BLIT_FBO].push_back();
+            q.begin();
+            fbo.blit(0, GL_COLOR_BUFFER_BIT);
+            q.end();
+        }
     }
 
     if(renderAsPoints) {
@@ -229,6 +252,13 @@ void GaussianCloud::GUI(Camera& camera) {
     ImGui::SliderFloat("scale_modifier", &scale_modifier, 0.001f, 1.0f, "%.3f", ImGuiSliderFlags_Logarithmic);
     ImGui::SliderFloat("min_opacity", &min_opacity, 0.01f, 1.0f, "%.3f", ImGuiSliderFlags_Logarithmic);
 
+    if(renderAsQuads){
+        ImGui::Text("FBO internal format:");
+        ImGui::RadioButton("RGBA8", &fboFormat, 0);
+        ImGui::RadioButton("RGBA16F", &fboFormat, 1);
+        ImGui::RadioButton("RGBA32F", &fboFormat, 2);
+    }
+
     ImGui::SliderInt("Selected gaussian", &selected_gaussian, -1, num_gaussians-1);
 
     if(selected_gaussian >= 0 && selected_gaussian < num_gaussians){
@@ -243,6 +273,13 @@ void GaussianCloud::GUI(Camera& camera) {
             ImGui::Text("Point rendering:");
             ImGui::Text("Predict colors: %.3fms", timers[OPERATIONS::PREDICT_COLORS_ALL].getLastResult() * 1.0E-6);
             ImGui::Text("Draw points: %.3fms", timers[OPERATIONS::DRAW_AS_POINTS].getLastResult() * 1.0E-6);
+
+            float total = 0.0f;
+            for(int i=0; i<= OPERATIONS::DRAW_AS_POINTS; i++){
+                total += timers[i].getLastResult() * 1.0E-6;
+            }
+            ImGui::Text("Total: %.3fms", total);
+
             ImGui::Separator();
         }
         if(renderAsQuads){
@@ -252,6 +289,14 @@ void GaussianCloud::GUI(Camera& camera) {
             ImGui::Text("Compute bounding boxes: %.3fms", timers[OPERATIONS::COMPUTE_BOUNDING_BOXES].getLastResult() * 1.0E-6);
             ImGui::Text("Predict colors: %.3fms", timers[OPERATIONS::PREDICT_COLORS_VISIBLE].getLastResult() * 1.0E-6);
             ImGui::Text("Draw quads: %.3fms", timers[OPERATIONS::DRAW_AS_QUADS].getLastResult() * 1.0E-6);
+            ImGui::Text("Blit framebuffer: %.3fms", timers[OPERATIONS::BLIT_FBO].getLastResult() * 1.0E-6);
+
+            float total = 0.0f;
+            for(int i=OPERATIONS::TEST_VISIBILITY; i<= OPERATIONS::BLIT_FBO; i++){
+                total += timers[i].getLastResult() * 1.0E-6;
+            }
+            ImGui::Text("Total: %.3fms", total);
+
             ImGui::Separator();
         }
         ImGui::TreePop();

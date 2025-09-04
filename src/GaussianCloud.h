@@ -11,6 +11,7 @@
 #include "RenderingBase/Camera.h"
 #include "RenderingBase/VAO.h"
 #include "RenderingBase/GLTimer.h"
+#include "RenderingBase/FBO.h"
 #include "Sort.cuh"
 
 class GaussianCloud {
@@ -58,6 +59,7 @@ private:
 
     GLBuffer uniforms;
     VAO quad;
+    FBO fbo;
 
     Sort sort;
 
@@ -69,6 +71,7 @@ private:
     float min_opacity = 0.02f;
     bool front_to_back = true;
     int selected_gaussian = -1;
+    int fboFormat = 0;
 
     enum OPERATIONS{
         PREDICT_COLORS_ALL,
@@ -78,6 +81,7 @@ private:
         COMPUTE_BOUNDING_BOXES,
         PREDICT_COLORS_VISIBLE,
         DRAW_AS_QUADS,
+        BLIT_FBO,
         NUM_OPS
     };
 

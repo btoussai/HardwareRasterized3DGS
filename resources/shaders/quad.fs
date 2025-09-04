@@ -11,7 +11,7 @@ ___out vec4 out_Color;
 ___flat ___in int InstanceID;
 ___in vec2 local_coord; // offset of the corner of the oriented bounding box from the center of the 2D ellipse, in pixels
 
-void main(void){
+void main(void) {
 
     const vec4 color = uniforms.predicted_colors[InstanceID];
     const vec4 conic_opacity = uniforms.conic_opacity[InstanceID];

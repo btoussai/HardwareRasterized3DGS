@@ -59,6 +59,8 @@ set(RenderingBase_files
 		src/RenderingBase/CudaIntrospection.cu
 		src/RenderingBase/CudaIntrospection.cuh
 		src/Window.cu
+		src/RenderingBase/FBO.cpp
+		src/RenderingBase/FBO.h
 )
 
 # Main program
